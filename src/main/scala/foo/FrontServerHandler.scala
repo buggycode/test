@@ -1,10 +1,11 @@
 package foo
 
 import org.jboss.netty.channel.{ ChannelEvent, ChannelHandlerContext, SimpleChannelUpstreamHandler, MessageEvent, ExceptionEvent, ChannelStateEvent }
+import java.util.concurrent.ConcurrentHashMap
 
 class FrontServerHandler extends SimpleChannelUpstreamHandler {
   var clientId:Int = 0
-  var clients:Map[ChannelHandlerContext,Int] = Map.empty
+  var clients = new ConcurrentHashMap[ChannelHandlerContext,Int]()
   
   override def handleUpstream(ctx: ChannelHandlerContext, e: ChannelEvent) {
     println("FrontServerHandler.handlerUpstream "+ this)
@@ -15,26 +16,30 @@ class FrontServerHandler extends SimpleChannelUpstreamHandler {
     println("FrontServerHandler.messageReceived "+ this)
     //e.getChannel().write(e.getMessage())
     var msg = e.getMessage()
-    for( (ctx,id) <- this.clients ) {
-      ctx.getChannel().write(msg)
+    
+    var ks =  this.clients.keys()
+    while (ks.hasMoreElements()) {
+      ks.nextElement().getChannel().write(msg)
     }
   }
 
   override def channelDisconnected(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
     println("FrontServerHandler.channelDisconnected " + this )
-    clients -= ctx
+    clients.remove(ctx)
     println("clients = " + clients)
   }
 
   override def channelConnected(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
     println("FrontServerHandler.channelConnected " + this )
-    clients += ( ctx -> this.clientId )
+    clients.put(ctx, this.clientId)
     clientId += 1
     println("clients = " + clients)
   }
   
-  override def exceptionCaught(context: ChannelHandlerContext, e: ExceptionEvent) {
+  override def exceptionCaught(ctx: ChannelHandlerContext, e: ExceptionEvent) {
     println("FrontServerHandler.exceptionCaught "+ this)
+    clients.remove(ctx)
     e.getChannel.close
+
   }
 }
